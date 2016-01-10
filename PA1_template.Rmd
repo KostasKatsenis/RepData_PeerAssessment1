@@ -8,18 +8,163 @@ output:
 
 ## Loading and preprocessing the data
 
+Load data
+```{r}
+tmp<-unzip("activity.zip")
+tmp
+data<- read.csv(tmp)
+str(data)
+head(data)
+```
+
+Transform data
+```{r}
+data$date<- as.Date(data$date, "%Y-%m-%d")
+str(data)
+```
 
 
 ## What is mean total number of steps taken per day?
 
+Calculate the total number of steps taken per day
+```{r}
+library(plyr)
+library(dplyr)
+```
+
+```{r}
+df1<- ddply(data,.(date),summarize, totalsteps = sum(steps))
+df1
+```
+
+Make a histogram of the total number of steps taken each day
+```{r histogram_of_totalsteps}
+par(mfrow=c(1,1))
+hist(df1$totalsteps, col= "Green" , xlab = "Number of steps per day", main="Histogram of steps per day")
+```
+
+Calculate and report the mean and median of the total number of steps taken per day.
+```{r}
+mean<- mean(df1$totalsteps, na.rm = TRUE)
+mean
+median<- median(df1$totalsteps, na.rm = TRUE)
+median
+```
+
+So, the mean of the total number of steps taken per day is `r mean` and the median is `r median`.
 
 
 ## What is the average daily activity pattern?
 
+Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, 
+averaged across all days (y-axis)
+```{r average_steps}
+averagesteps<- ddply(data,.(interval),summarize, mean = mean(steps, na.rm = TRUE))
+head(averagesteps)
+with(averagesteps, plot(interval, mean, ylab="Average steps across all days", type="l", main="Average number of
+    steps across all days"))
+```
 
+
+Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r}
+averagesteps[averagesteps$mean==max(averagesteps$mean),]
+```
+
+So, in the interval 835 or 08:35AM-08:40AM is the maximum number of steps across all days.  
+It is logical to think that because in this interval a lot of people go to work,that's why the maximum is in here.
 
 ## Imputing missing values
 
+Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+```{r}
+colSums(is.na(data))
+```
+We see that only in the column steps there are NA's.
+```{r}
+totalNA<- sum(is.na(data$steps))
+```
+The total number of rows with missing values in the dataset is `r totalNA`.
+
+
+My strategy for filling in all of the missing values in the dataset would be to use the average number 
+of steps for each interval to fill in the NAs.
+
+To create a new dataset that is equal to the original dataset but with the missing data filled in,
+first I will try to create a new column in the orignal data frame which contains the mean for each interval.
+```{r}
+df3<- arrange(join(data,averagesteps),interval)
+head(df3)
+```
+
+Now, I want to sort the data frame by date and then by interval.
+```{r}
+df3<- arrange(df3, date, interval)
+head(df3)
+str(df3)
+```
+
+I added the column mean to the original data frame.  
+My plan is to change the NA values with the mean values for that interval. Because the mean column has numerical values  
+and steps column has integer values, I will transform the steps column from an integer vector to a numerical vector.
+```{r}
+df3$steps<- as.numeric(df3$steps)
+str(df3)
+```
+And now I will change the NA values with the mean values.
+```{r}
+df3$steps[is.na(df3$steps)]<- df3$mean[is.na(df3$steps)]
+head(df3)
+```
+Finally, I will remove the mean column.
+```{r}
+newdata<- select(df3, - mean)
+head(newdata) 
+```
+
+Make a histogram of the total number of steps taken each day and calculate and report the mean   
+and median total number of steps taken per day.
+```{r histogramNoNA}
+df4<- ddply(newdata,.(date),summarize, totalsteps = sum(steps))
+df4
+hist(df4$totalsteps, col= "Green" , xlab = "Number of steps per day", main="Histogram of steps per day")
+```
+  
+I calculate the new mean and the new median.
+```{r}
+newmean<- mean(df4$totalsteps)
+newmean
+newmedian<- median(df4$totalsteps)
+newmedian
+```
+So, the new mean of the total number of steps taken per day is `r newmean` and the new median is `r newmedian`.  
+We can see that the new values do not differ from the first ones.  
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+I will create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date 
+is a weekday or weekend   
+First of all, my system needs the Sys.setlocale command in order to translate days in english.
+```{r, results='hide'}
+Sys.setlocale("LC_ALL", "English")
+```
+I will use the ifelse command to create a character vector and then I will transform it to a categorical variable.
+```{r}
+newdata$day<- ifelse(weekdays(newdata$date) %in% c("Saturday","Sunday"), "weekend", "weekday")
+newdata$day<- factor(newdata$day)
+head(newdata)
+```
+
+I will make a panel plot containing a time series plot of the 5-minute interval and the average number of steps taken, 
+ averaged across all weekday days or weekend days.
+```{r panelplot}
+library(lattice)
+dff<-ddply(newdata,.(interval,day),summarize, mean=mean(steps))
+head(dff)
+xyplot(mean~interval | day, data=dff, ylab="Average number of steps", type="l", layout=c(1,2))
+```
+
+
+
+
